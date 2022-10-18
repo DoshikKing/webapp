@@ -37,81 +37,83 @@ services:
     restart: always
 
 
-  adminer:
-    image: adminer
-    ports:
-      - 8081:8080
-    depends_on:
-      - db
-
-  grafana:
-    image: grafana/grafana
-    ports:
-      - 3000:3000
-    volumes:
-      - grafana:/var/lib/grafana
-      - certs:/certs
-
-  prometheus:
-    image: prom/prometheus
-    ports:
-      - 9090:9090
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter
-    ports:
-      - 9187:9187
-    environment:
-      DATA_SOURCE_NAME: postgresql://postgres:12345@db:5432/postgres?sslmode=disable
-    links:
-      - db
-      - prometheus
-
-  zabbix-server:
-    image: zabbix/zabbix-server-pgsql:ubuntu-5.0.0
-    container_name: zabbix-server
-    hostname: zabbix-server
-    restart: always
-    environment:
-      - DB_SERVER_HOST=db2
-      - TZ="Europe/Moscow"
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=12345
-      - POSTGRES_DB=zabbix
-    depends_on:
-      - db2
-
-  zabbix-web:
-    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.0.0
-    container_name: zabbix-web
-    hostname: zabbix-web
-    restart: always
-    environment:
-      - DB_SERVER_HOST=db2
-      - TZ="Europe/Moscow"
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=12345
-      - POSTGRES_DB=zabbix
-      - ZBX_SERVER_HOST=zabbix-server
-      - PHP_TZ="Europe/Moscow"
-    ports:
-      - 8082:8080
-      - 8443:8443
-    depends_on:
-      - db2
-      - zabbix-server
+#  adminer:
+#    image: adminer
+#    ports:
+#      - 8081:8080
+#    depends_on:
+#      - db
+#
+#  grafana:
+#    image: grafana/grafana
+#    ports:
+#      - 3000:3000
+#    volumes:
+#      - grafana:/var/lib/grafana
+#      - certs:/certs
+#
+#  prometheus:
+#    image: prom/prometheus
+#    ports:
+#      - 9090:9090
+#    volumes:
+#      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+#
+#  postgres-exporter:
+#    image: prometheuscommunity/postgres-exporter
+#    ports:
+#      - 9187:9187
+#    environment:
+#      DATA_SOURCE_NAME: postgresql://postgres:12345@db:5432/postgres?sslmode=disable
+#    links:
+#      - db
+#      - prometheus
+#
+#  zabbix-server:
+#    image: zabbix/zabbix-server-pgsql:ubuntu-5.0.0
+#    container_name: zabbix-server
+#    hostname: zabbix-server
+#    restart: always
+#    environment:
+#      - DB_SERVER_HOST=db2
+#      - TZ="Europe/Moscow"
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=12345
+#      - POSTGRES_DB=zabbix
+#    depends_on:
+#      - db2
+#
+#  zabbix-web:
+#    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.0.0
+#    container_name: zabbix-web
+#    hostname: zabbix-web
+#    restart: always
+#    environment:
+#      - DB_SERVER_HOST=db2
+#      - TZ="Europe/Moscow"
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=12345
+#      - POSTGRES_DB=zabbix
+#      - ZBX_SERVER_HOST=zabbix-server
+#      - PHP_TZ="Europe/Moscow"
+#    ports:
+#      - 8082:8080
+#      - 8443:8443
+#    depends_on:
+#      - db2
+#      - zabbix-server
 
   mongodb:
     image: mongo:latest
+    networks:
+      - graylog
     #DB in share for persistence
     volumes:
       - mongo_data:/data/db
     # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
 
   elasticsearch:
-    image: elasticsearch:8.4.3
+    image: elasticsearch:7.17.0
     #data folder in share for persistence
     volumes:
       - es_data:/usr/share/elasticsearch/data
@@ -119,11 +121,20 @@ services:
       - http.host=0.0.0.0
       - transport.host=localhost
       - network.host=0.0.0.0
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Dlog4j2.formatMsgNoLookups=true -Xms512m -Xmx512m"
     ulimits:
       memlock:
         soft: -1
         hard: -1
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    networks:
+      - graylog
+    ports:
+      - 9200:9200
 
   # Graylog: https://hub.docker.com/r/graylog/graylog/
   graylog:
@@ -135,15 +146,25 @@ services:
       # CHANGE ME (must be at least 16 characters)!
       - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
       # Password: admin
+      - GRAYLOG_HTTP_BIND_ADDRESS=127.0.0.1:9000
       - GRAYLOG_ROOT_PASSWORD_SHA2=e1b24204830484d635d744e849441b793a6f7e1032ea1eef40747d95d30da592
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://192.168.205.4:9000/
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/
+      - GRAYLOG_TRANSPORT_EMAIL_HOSTNAME=smtp.example.com
+      - GRAYLOG_TRANSPORT_EMAIL_ENABLED=true
+      - GRAYLOG_TRANSPORT_EMAIL_PORT=25
+      - GRAYLOG_TRANSPORT_EMAIL_USE_AUTH=false
+      - GRAYLOG_TRANSPORT_EMAIL_USE_TLS=false
+      - GRAYLOG_TRANSPORT_EMAIL_USE_SSL=false
+      - GRAYLOG_TRANSPORT_FROM_EMAIL=youremail@yourdomain.com
+      - GRAYLOG_TRANSPORT_SUBJECT_PREFIX=[graylog]
     entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
+    networks:
+      - graylog
     links:
       - mongodb:mongo
       - elasticsearch
     restart: always
     depends_on:
-      - db
       - mongodb
       - elasticsearch
     ports:
@@ -165,3 +186,7 @@ volumes:
   es_data:
   graylog_journal:
   mongo_data:
+
+networks:
+  graylog:
+    driver: bridge
