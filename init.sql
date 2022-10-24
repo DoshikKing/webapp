@@ -1,0 +1,6 @@
+CREATE USER zabbix;
+ALTER USER zabbix password '12345';
+CREATE DATABASE zabbix WITH OWNER='zabbix' ENCODING='UTF-8' TEMPLATE='template0';
+GRANT USAGE ON SCHEMA public TO zabbix;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO zabbix;
+GRANT pg_monitor TO zabbix;

@@ -1,15 +1,15 @@
 version: "3.9"
 services:
-  webapp:
-    build: .
-    container_name: webapp
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/postgres
-    ports:
-      - 8000:8080
-    restart: always
-    depends_on:
-      - db
+#  webapp:
+#    build: .
+#    container_name: webapp
+#    environment:
+#      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/postgres
+#    ports:
+#      - 8000:8080
+#    restart: always
+#    depends_on:
+#      - db
 
   db:
     image: postgres:14
@@ -24,17 +24,26 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
+    logging:
+      driver: "gelf"
+      options:
+        gelf-address: "udp://127.0.0.1:12201"
+        tag: "first-logs"
 
-  db2:
-    image: postgres:14
-    container_name: db2
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=12345
-      - POSTGRES_DB=zabbix
-    ports:
-      - 5001:5432
-    restart: always
+#  db2:
+#    image: bitnami/postgresql:14-debian-11
+#    container_name: db2
+#    environment:
+#      - POSTGRES_USER=postgres
+#      - POSTGRES_PASSWORD=12345
+#      - LC_ALL=en_US.UTF-8
+#      - LANGUAGE=en_US:en
+#      - LANG=en_US.UTF-8
+#    volumes:
+#      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+#    ports:
+#      - 5001:5432
+#    restart: always
 
 
 #  adminer:
@@ -77,9 +86,11 @@ services:
 #    environment:
 #      - DB_SERVER_HOST=db2
 #      - TZ="Europe/Moscow"
-#      - POSTGRES_USER=postgres
+#      - POSTGRES_USER=zabbix
 #      - POSTGRES_PASSWORD=12345
 #      - POSTGRES_DB=zabbix
+#    ports:
+#      - 10051:10051
 #    depends_on:
 #      - db2
 #
@@ -91,17 +102,28 @@ services:
 #    environment:
 #      - DB_SERVER_HOST=db2
 #      - TZ="Europe/Moscow"
-#      - POSTGRES_USER=postgres
+#      - POSTGRES_USER=zabbix
 #      - POSTGRES_PASSWORD=12345
 #      - POSTGRES_DB=zabbix
 #      - ZBX_SERVER_HOST=zabbix-server
 #      - PHP_TZ="Europe/Moscow"
 #    ports:
 #      - 8082:8080
-#      - 8443:8443
 #    depends_on:
 #      - db2
 #      - zabbix-server
+#
+#  zabbix-agent:
+#    image: zabbix/zabbix-agent:5.0.10-alpine
+#    container_name: zabbix-agent
+#    hostname: zabbix-agent
+#    restart: always
+
+#  zabbix:
+#    image: zabbix/zabbix-appliance
+#    ports:
+#      - 80:80
+#      - 10051:10051
 
   mongodb:
     image: mongo:latest
@@ -113,10 +135,10 @@ services:
     # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
 
   elasticsearch:
-    image: elasticsearch:7.17.0
+    image: elasticsearch:6.8.23
     #data folder in share for persistence
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
+    #volumes:
+     # - es_data:/usr/share/elasticsearch/data
     environment:
       - http.host=0.0.0.0
       - transport.host=localhost
@@ -138,7 +160,7 @@ services:
 
   # Graylog: https://hub.docker.com/r/graylog/graylog/
   graylog:
-    image: graylog/graylog:4.3
+    image: graylog/graylog:4.0
     #journal and config directories in local NFS share for persistence
     volumes:
       - graylog_journal:/usr/share/graylog/data/journal
@@ -146,9 +168,9 @@ services:
       # CHANGE ME (must be at least 16 characters)!
       - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
       # Password: admin
-      - GRAYLOG_HTTP_BIND_ADDRESS=127.0.0.1:9000
-      - GRAYLOG_ROOT_PASSWORD_SHA2=e1b24204830484d635d744e849441b793a6f7e1032ea1eef40747d95d30da592
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://127.0.0.1:9000/
+      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
       - GRAYLOG_TRANSPORT_EMAIL_HOSTNAME=smtp.example.com
       - GRAYLOG_TRANSPORT_EMAIL_ENABLED=true
       - GRAYLOG_TRANSPORT_EMAIL_PORT=25
@@ -183,7 +205,7 @@ volumes:
   pgdata:
   grafana:
   certs:
-  es_data:
+  #es_data:
   graylog_journal:
   mongo_data:
 
