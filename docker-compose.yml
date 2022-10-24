@@ -31,20 +31,22 @@ services:
         gelf-address: "udp://127.0.0.1:12201"
         tag: "first-logs"
 
-#  db2:
-#    image: bitnami/postgresql:14-debian-11
-#    container_name: db2
-#    environment:
-#      - POSTGRES_USER=postgres
-#      - POSTGRES_PASSWORD=12345
-#      - LC_ALL=en_US.UTF-8
-#      - LANGUAGE=en_US:en
-#      - LANG=en_US.UTF-8
-#    volumes:
-#      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-#    ports:
-#      - 5001:5432
-#    restart: always
+  db2:
+    image: bitnami/postgresql:14-debian-11
+    container_name: db2
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=12345
+      - LC_ALL=en_US.UTF-8
+      - LANGUAGE=en_US:en
+      - LANG=en_US.UTF-8
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - 5001:5432
+    restart: always
+    networks:
+      - zabbix
 
 
 #  adminer:
@@ -79,46 +81,55 @@ services:
 #      - db
 #      - prometheus
 #
-#  zabbix-server:
-#    image: zabbix/zabbix-server-pgsql:ubuntu-5.0.0
-#    container_name: zabbix-server
-#    hostname: zabbix-server
-#    restart: always
-#    environment:
-#      - DB_SERVER_HOST=db2
-#      - TZ="Europe/Moscow"
-#      - POSTGRES_USER=zabbix
-#      - POSTGRES_PASSWORD=12345
-#      - POSTGRES_DB=zabbix
-#    ports:
-#      - 10051:10051
-#    depends_on:
-#      - db2
-#
-#  zabbix-web:
-#    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.0.0
-#    container_name: zabbix-web
-#    hostname: zabbix-web
-#    restart: always
-#    environment:
-#      - DB_SERVER_HOST=db2
-#      - TZ="Europe/Moscow"
-#      - POSTGRES_USER=zabbix
-#      - POSTGRES_PASSWORD=12345
-#      - POSTGRES_DB=zabbix
-#      - ZBX_SERVER_HOST=zabbix-server
-#      - PHP_TZ="Europe/Moscow"
-#    ports:
-#      - 8082:8080
-#    depends_on:
-#      - db2
-#      - zabbix-server
-#
-#  zabbix-agent:
-#    image: zabbix/zabbix-agent:5.0.10-alpine
-#    container_name: zabbix-agent
-#    hostname: zabbix-agent
-#    restart: always
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:ubuntu-5.0.0
+    container_name: zabbix-server
+    hostname: zabbix-server
+    restart: always
+    environment:
+      - DB_SERVER_HOST=db2
+      - TZ="Europe/Moscow"
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=12345
+      - POSTGRES_DB=zabbix
+    ports:
+      - 10051:10051
+    depends_on:
+      - db2
+    networks:
+      - zabbix
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.0.0
+    container_name: zabbix-web
+    hostname: zabbix-web
+    restart: always
+    environment:
+      - DB_SERVER_HOST=db2
+      - TZ="Europe/Moscow"
+      - POSTGRES_USER=zabbix
+      - POSTGRES_PASSWORD=12345
+      - POSTGRES_DB=zabbix
+      - ZBX_SERVER_HOST=zabbix-server
+      - PHP_TZ="Europe/Moscow"
+    ports:
+      - 8082:8080
+    depends_on:
+      - db2
+      - zabbix-server
+    networks:
+      - zabbix
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent:5.0.10-alpine
+    container_name: zabbix-agent
+    environment:
+      - ZBX_HOSTNAME=Zabbix server
+      - ZBX_SERVER_HOST=127.0.0.1
+    #hostname: "Zabbix server"
+    restart: always
+    networks:
+      - zabbix
 
 #  zabbix:
 #    image: zabbix/zabbix-appliance
@@ -126,81 +137,81 @@ services:
 #      - 80:80
 #      - 10051:10051
 
-  mongodb:
-    image: mongo:latest
-    networks:
-      - graylog
-    #DB in share for persistence
-    volumes:
-      - mongo_data:/data/db
-    # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
-
-  elasticsearch:
-    image: elasticsearch:6.8.23
-    #data folder in share for persistence
-    #volumes:
-     # - es_data:/usr/share/elasticsearch/data
-    environment:
-      - http.host=0.0.0.0
-      - transport.host=localhost
-      - network.host=0.0.0.0
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Dlog4j2.formatMsgNoLookups=true -Xms512m -Xmx512m"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-    networks:
-      - graylog
-    ports:
-      - 9200:9200
-
-  # Graylog: https://hub.docker.com/r/graylog/graylog/
-  graylog:
-    image: graylog/graylog:4.0
-    #journal and config directories in local NFS share for persistence
-    volumes:
-      - graylog_journal:/usr/share/graylog/data/journal
-    environment:
-      # CHANGE ME (must be at least 16 characters)!
-      - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
-      # Password: admin
-      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
-      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
-      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
-      - GRAYLOG_TRANSPORT_EMAIL_HOSTNAME=smtp.example.com
-      - GRAYLOG_TRANSPORT_EMAIL_ENABLED=true
-      - GRAYLOG_TRANSPORT_EMAIL_PORT=25
-      - GRAYLOG_TRANSPORT_EMAIL_USE_AUTH=false
-      - GRAYLOG_TRANSPORT_EMAIL_USE_TLS=false
-      - GRAYLOG_TRANSPORT_EMAIL_USE_SSL=false
-      - GRAYLOG_TRANSPORT_FROM_EMAIL=youremail@yourdomain.com
-      - GRAYLOG_TRANSPORT_SUBJECT_PREFIX=[graylog]
-    entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
-    networks:
-      - graylog
-    links:
-      - mongodb:mongo
-      - elasticsearch
-    restart: always
-    depends_on:
-      - mongodb
-      - elasticsearch
-    ports:
-      # Graylog web interface and REST API
-      - 9000:9000
-      # Syslog TCP
-      - 1514:1514
-      # Syslog UDP
-      - 1514:1514/udp
-      # GELF TCP
-      - 12201:12201
-      # GELF UDP
-      - 12201:12201/udp
+#  mongodb:
+#    image: mongo:latest
+#    networks:
+#      - graylog
+#    #DB in share for persistence
+#    volumes:
+#      - mongo_data:/data/db
+#    # Elasticsearch: https://www.elastic.co/guide/en/elasticsearch/reference/7.10/docker.html
+#
+#  elasticsearch:
+#    image: elasticsearch:6.8.23
+#    #data folder in share for persistence
+#    #volumes:
+#     # - es_data:/usr/share/elasticsearch/data
+#    environment:
+#      - http.host=0.0.0.0
+#      - transport.host=localhost
+#      - network.host=0.0.0.0
+#      - xpack.security.enabled=false
+#      - "ES_JAVA_OPTS=-Dlog4j2.formatMsgNoLookups=true -Xms512m -Xmx512m"
+#    ulimits:
+#      memlock:
+#        soft: -1
+#        hard: -1
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 1g
+#    networks:
+#      - graylog
+#    ports:
+#      - 9200:9200
+#
+#  # Graylog: https://hub.docker.com/r/graylog/graylog/
+#  graylog:
+#    image: graylog/graylog:4.0
+#    #journal and config directories in local NFS share for persistence
+#    volumes:
+#      - graylog_journal:/usr/share/graylog/data/journal
+#    environment:
+#      # CHANGE ME (must be at least 16 characters)!
+#      - GRAYLOG_PASSWORD_SECRET=somepasswordpepper
+#      # Password: admin
+#      - GRAYLOG_HTTP_BIND_ADDRESS=0.0.0.0:9000
+#      - GRAYLOG_ROOT_PASSWORD_SHA2=8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+#      - GRAYLOG_HTTP_EXTERNAL_URI=http://localhost:9000/
+#      - GRAYLOG_TRANSPORT_EMAIL_HOSTNAME=smtp.example.com
+#      - GRAYLOG_TRANSPORT_EMAIL_ENABLED=true
+#      - GRAYLOG_TRANSPORT_EMAIL_PORT=25
+#      - GRAYLOG_TRANSPORT_EMAIL_USE_AUTH=false
+#      - GRAYLOG_TRANSPORT_EMAIL_USE_TLS=false
+#      - GRAYLOG_TRANSPORT_EMAIL_USE_SSL=false
+#      - GRAYLOG_TRANSPORT_FROM_EMAIL=youremail@yourdomain.com
+#      - GRAYLOG_TRANSPORT_SUBJECT_PREFIX=[graylog]
+#    entrypoint: /usr/bin/tini -- wait-for-it elasticsearch:9200 --  /docker-entrypoint.sh
+#    networks:
+#      - graylog
+#    links:
+#      - mongodb:mongo
+#      - elasticsearch
+#    restart: always
+#    depends_on:
+#      - mongodb
+#      - elasticsearch
+#    ports:
+#      # Graylog web interface and REST API
+#      - 9000:9000
+#      # Syslog TCP
+#      - 1514:1514
+#      # Syslog UDP
+#      - 1514:1514/udp
+#      # GELF TCP
+#      - 12201:12201
+#      # GELF UDP
+#      - 12201:12201/udp
 
 volumes:
   pgdata:
@@ -211,5 +222,7 @@ volumes:
   mongo_data:
 
 networks:
+  zabbix:
+    driver: bridge
   graylog:
     driver: bridge
